@@ -1,64 +1,25 @@
 # TradeWise
 
-TradeWise is a stock portfolio management application that simulates buying and tracking investments. The project focuses on building a backend system that manages portfolios, stock holdings, transactions, and real-time stock prices.
+TradeWise is a stock portfolio management application that simulates buying and tracking investments. The project was built to practice backend development, database design, API integration, and building a real-world application workflow.
+
+## Purpose
+
+The goal of TradeWise is to create a platform where users can manage a stock portfolio, retrieve real-time stock prices, track holdings, and record transaction history.
 
 ## Features
 
 - Retrieve real-time stock prices using Alpha Vantage API
 - Buy stocks and update portfolio balance
-- Track current stock holdings
+- Track owned stocks and shares
 - Store transaction history
-- Manage portfolio data with PostgreSQL
+- Manage portfolio data using PostgreSQL
 
-## Database Design
+## Technologies Used
 
-TradeWise uses a relational PostgreSQL database to organize users, portfolios, holdings, and transactions.
-
-```mermaid
-erDiagram
-
-    USERS {
-        int id PK
-        varchar name
-        varchar email
-        varchar password
-    }
-
-    PORTFOLIO {
-        int id PK
-        int user_id FK
-        decimal cash
-    }
-
-    HOLDINGS {
-        int id PK
-        int portfolio_id FK
-        varchar symbol
-        int shares
-    }
-
-    TRANSACTIONS {
-        int id PK
-        int portfolio_id FK
-        varchar symbol
-        varchar type
-        int shares
-        decimal price
-        decimal total
-        timestamp created_at
-    }
-
-    USERS ||--|| PORTFOLIO : owns
-    PORTFOLIO ||--o{ HOLDINGS : contains
-    PORTFOLIO ||--o{ TRANSACTIONS : records
-```
-
-## Technologies
-
+- JavaScript
 - Node.js
 - Express.js
 - PostgreSQL
-- JavaScript
 - Alpha Vantage API
 - Git/GitHub
 
@@ -70,7 +31,7 @@ Clone the repository:
 git clone https://github.com/fuzislit/TradeWise.git
 ```
 
-Navigate to the backend:
+Navigate to the server directory:
 
 ```bash
 cd server
@@ -82,19 +43,19 @@ Install dependencies:
 npm install
 ```
 
-Create a `.env` file:
+Create a `.env` file and add your API key:
 
 ```env
 ALPHA_VANTAGE_API_KEY=your_api_key_here
 ```
 
-Start the server:
+Start the backend server:
 
 ```bash
 node index.js
 ```
 
-The backend will run on:
+The server will run on:
 
 ```
 http://localhost:3000
@@ -102,7 +63,7 @@ http://localhost:3000
 
 ## Future Improvements
 
-- User authentication
-- Stock selling functionality
-- Frontend dashboard
-- Portfolio performance tracking
+- Add user authentication
+- Implement stock selling
+- Build a frontend dashboard
+- Add portfolio performance tracking
