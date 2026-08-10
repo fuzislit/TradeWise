@@ -159,15 +159,33 @@ app.get("/holdings", async (req, res) => {
 });
 app.get("/portfolio", async (req, res) => {
     try {
-        const portfolio = await pool.query("SELECT * FROM portfolio WHERE id = $1",[1]);
+        const portfolio = await pool.query(
+            `SELECT users.name, portfolio.cash, holdings.symbol, holdings.shares
+            FROM users
+            JOIN portfolio
+            ON users.id = portfolio.user_id
+            LEFT JOIN holdings
+            ON portfolio.id = holdings.portfolio_id`
+        );
+
+
+        const formattedHoldings = portfolio.rows.map(row => ({
+            symbol: row.symbol,
+            shares: row.shares
+        }));
+
 
         const holdings = await pool.query("SELECT * FROM holdings WHERE portfolio_id = $1",[1]);
         
         const transactions = await pool.query("SELECT * FROM transactions WHERE portfolio_id = $1", [1] );
 
         res.json({
-            portfolio: portfolio.rows[0],
-            holdings: holdings.rows,
+            portfolio: {
+                name: portfolio.rows[0].name,
+                cash: portfolio.rows[0].cash
+            },
+        
+            holdings: formattedHoldings,
             transactions: transactions.rows
         });
 
