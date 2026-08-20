@@ -141,6 +141,81 @@ app.post("/buy", async (req, res) => {
     }
 });
 
+app.post("/sell", async (req, res) => {
+    try {
+        const { symbol, shares } = req.body;
+
+        const holdingResult = await pool.query(
+            "SELECT * FROM holdings WHERE portfolio_id = $1 AND symbol = $2",
+            [1, symbol]
+        );
+        const existingHolding = holdingResult.rows[0];
+
+        if (!existingHolding) {
+            return res.status(404).json({
+                message: "Holding not found"
+            });
+        }
+
+        if (existingHolding.shares < shares) {
+            return res.status(400).json({
+                message: "Not enough shares to sell"
+            });
+        }
+
+        const price = await getStockPrice(symbol);
+        const total = price * shares;
+        const remainingShares = existingHolding.shares - shares;
+
+        const portfolioResult = await pool.query(
+            "SELECT * FROM portfolio WHERE id = $1",
+            [1]
+        );
+        
+        const portfolio = portfolioResult.rows[0];
+        const newCash = Number(portfolio.cash) + total;
+        
+        await pool.query(
+            "UPDATE portfolio SET cash = $1 WHERE id = $2",
+            [newCash, 1]
+        );
+
+        if (remainingShares === 0) {
+            await pool.query(
+                "DELETE FROM holdings WHERE id = $1",
+                [existingHolding.id]
+            );
+        } else {
+            await pool.query(
+                "UPDATE holdings SET shares = $1 WHERE id = $2",
+                [remainingShares, existingHolding.id]
+            );
+        }
+        
+        await pool.query(
+            `INSERT INTO transactions
+            (portfolio_id, symbol, type, shares, price, total)
+            VALUES ($1, $2, $3, $4, $5, $6)`,
+            [1, symbol, "SELL", shares, price, total]
+        );
+        
+        res.json({
+            symbol,
+            shares,
+            price,
+            total,
+            remainingCash: Number(newCash.toFixed(2)),
+            message: "Stock sold successfully"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            message: "Could not process stock sale"
+        });
+    }
+});
 app.get("/holdings", async (req, res) => {
     try {
         const result = await pool.query(
