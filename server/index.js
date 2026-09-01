@@ -275,6 +275,24 @@ app.get("/portfolio", async (req, res) => {
 
 });
 
+app.get("/transactions", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, symbol, type, shares, price, total, created_at
+            FROM transactions
+            ORDER BY created_at DESC`
+        );
+        res.json(result.rows);
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            message: "Database error"
+        });
+    }
+});
+
 pool.query("SELECT NOW()", (error, result) => {
     if (error) {
         console.error("Database connection failed:", error);
