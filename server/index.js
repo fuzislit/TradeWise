@@ -27,8 +27,15 @@ function getStockPrice(symbol) {
                 try {
                     const stockData = JSON.parse(data);
 
+                    if (!stockData["Global Quote"]) {
+                        reject(new Error(
+                            stockData["Information"] || "Stock price unavailable"
+                        ));
+                        return;
+                    }
+                    
                     const price = stockData["Global Quote"]["05. price"];
-
+                    
                     if (!price) {
                         reject(new Error("Stock price not found"));
                         return;
@@ -273,6 +280,53 @@ app.get("/portfolio", async (req, res) => {
         });
     }
 
+});
+
+app.get("/portfolio/value", async (req, res) => {
+    try {
+        const portfolioResult = await pool.query(
+            "SELECT cash FROM portfolio WHERE id = $1",
+            [1]
+        );
+        const portfolio = portfolioResult.rows[0];
+
+        if (!portfolio) {
+            return res.status(404).json({
+                message: "Portfolio not found"
+            });
+        }
+
+        const holdingsResult = await pool.query(
+            "SELECT symbol, shares FROM holdings WHERE portfolio_id = $1",
+            [1]
+        );
+
+        let holdingsValue = 0;
+
+        for (const holding of holdingsResult.rows) {
+            const price = await getStockPrice(holding.symbol);
+            const value = price * holding.shares;
+        
+            holdingsValue += value;
+        
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        const totalValue = Number(portfolio.cash) + holdingsValue;
+
+        res.json({
+            cash: Number(portfolio.cash),
+            holdingsValue: Number(holdingsValue.toFixed(2)),
+            totalValue: Number(totalValue.toFixed(2))
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            message: "Could not calculate portfolio value"
+        });
+    }
 });
 
 app.get("/transactions", async (req, res) => {
