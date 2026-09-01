@@ -1,9 +1,7 @@
-require("dotenv").config(); // configuration for the API key 
+require("dotenv").config(); // configuration for the API key
 
-const express = require("express"); 
-
+const express = require("express");
 const pool = require("./db");
-
 const https = require("https");
 
 function getStockPrice(symbol) {
@@ -33,13 +31,14 @@ function getStockPrice(symbol) {
                         ));
                         return;
                     }
-                    
+
                     const price = stockData["Global Quote"]["05. price"];
-                    
+
                     if (!price) {
                         reject(new Error("Stock price not found"));
                         return;
                     }
+
                     resolve(Number(price));
 
                 } catch (error) {
@@ -53,30 +52,35 @@ function getStockPrice(symbol) {
     });
 }
 
-const app = express(); 
+const app = express();
 
-app.use(express.json()); 
+app.use(express.json());
 
-const PORT = 3000; 
+const PORT = 3000;
 
 
-app.get("/", (req, res)=> {
+// Home
+app.get("/", (req, res) => {
     res.json({
-        message: ("Welcome to TradeWise!"),  //Welcome message to test
-        status: ("Backend is running!") // status
-    }); 
+        message: "Welcome to TradeWise!",
+        status: "Backend is running!"
+    });
 });
 
 
+// BUY
 app.post("/buy", async (req, res) => {
     try {
-        const { symbol, shares } = req.body;
 
-        if (!symbol || !shares) {
+        let { symbol, shares } = req.body;
+
+        if (!symbol || !shares || shares <= 0) {
             return res.status(400).json({
-                message: "Missing stock information"
+                message: "Symbol and shares must be valid"
             });
         }
+
+        symbol = symbol.toUpperCase().trim();
 
         const price = await getStockPrice(symbol);
         const total = price * shares;
@@ -110,9 +114,10 @@ app.post("/buy", async (req, res) => {
             "SELECT * FROM holdings WHERE portfolio_id = $1 AND symbol = $2",
             [1, symbol]
         );
-        
+
         const existingHolding = holdingResult.rows[0];
-        //update holdings table
+
+        // Update holdings table
         if (existingHolding) {
             await pool.query(
                 "UPDATE holdings SET shares = shares + $1 WHERE id = $2",
@@ -124,9 +129,10 @@ app.post("/buy", async (req, res) => {
                 [1, symbol, shares]
             );
         }
-        //update transaction Table
+
+        // Update transactions table
         await pool.query(
-            `INSERT INTO transactions 
+            `INSERT INTO transactions
             (portfolio_id, symbol, type, shares, price, total)
             VALUES ($1, $2, $3, $4, $5, $6)`,
             [1, symbol, "BUY", shares, price, total]
@@ -141,6 +147,7 @@ app.post("/buy", async (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
         res.status(500).json({
             message: "Could not process stock purchase"
@@ -148,9 +155,19 @@ app.post("/buy", async (req, res) => {
     }
 });
 
+// SELL
 app.post("/sell", async (req, res) => {
     try {
-        const { symbol, shares } = req.body;
+
+        let { symbol, shares } = req.body;
+
+        if (!symbol || !shares || shares <= 0) {
+            return res.status(400).json({
+                message: "Symbol and shares must be valid"
+            });
+        }
+
+        symbol = symbol.toUpperCase().trim();
 
         const holdingResult = await pool.query(
             "SELECT * FROM holdings WHERE portfolio_id = $1 AND symbol = $2",
@@ -178,10 +195,10 @@ app.post("/sell", async (req, res) => {
             "SELECT * FROM portfolio WHERE id = $1",
             [1]
         );
-        
+
         const portfolio = portfolioResult.rows[0];
         const newCash = Number(portfolio.cash) + total;
-        
+
         await pool.query(
             "UPDATE portfolio SET cash = $1 WHERE id = $2",
             [newCash, 1]
@@ -198,14 +215,14 @@ app.post("/sell", async (req, res) => {
                 [remainingShares, existingHolding.id]
             );
         }
-        
+
         await pool.query(
             `INSERT INTO transactions
             (portfolio_id, symbol, type, shares, price, total)
             VALUES ($1, $2, $3, $4, $5, $6)`,
             [1, symbol, "SELL", shares, price, total]
         );
-        
+
         res.json({
             symbol,
             shares,
@@ -223,6 +240,8 @@ app.post("/sell", async (req, res) => {
         });
     }
 });
+
+// HOLDINGS
 app.get("/holdings", async (req, res) => {
     try {
         const result = await pool.query(
@@ -239,6 +258,8 @@ app.get("/holdings", async (req, res) => {
         });
     }
 });
+
+// PORTFOLIO
 app.get("/portfolio", async (req, res) => {
     try {
         const portfolio = await pool.query(
@@ -250,23 +271,22 @@ app.get("/portfolio", async (req, res) => {
             ON portfolio.id = holdings.portfolio_id`
         );
 
-
         const formattedHoldings = portfolio.rows.map(row => ({
             symbol: row.symbol,
             shares: row.shares
         }));
 
-
-        const holdings = await pool.query("SELECT * FROM holdings WHERE portfolio_id = $1",[1]);
-        
-        const transactions = await pool.query("SELECT * FROM transactions WHERE portfolio_id = $1", [1] );
+        const transactions = await pool.query(
+            "SELECT * FROM transactions WHERE portfolio_id = $1",
+            [1]
+        );
 
         res.json({
             portfolio: {
                 name: portfolio.rows[0].name,
                 cash: portfolio.rows[0].cash
             },
-        
+
             holdings: formattedHoldings,
             transactions: transactions.rows
         });
@@ -279,11 +299,13 @@ app.get("/portfolio", async (req, res) => {
             message: "Could not load portfolio"
         });
     }
-
 });
 
+
+// PORTFOLIO VALUE
 app.get("/portfolio/value", async (req, res) => {
     try {
+
         const portfolioResult = await pool.query(
             "SELECT cash FROM portfolio WHERE id = $1",
             [1]
@@ -304,14 +326,15 @@ app.get("/portfolio/value", async (req, res) => {
         let holdingsValue = 0;
 
         for (const holding of holdingsResult.rows) {
+
             const price = await getStockPrice(holding.symbol);
             const value = price * holding.shares;
-        
             holdingsValue += value;
-        
+
+            // Alpha Vantage free API rate limit
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        
+
         const totalValue = Number(portfolio.cash) + holdingsValue;
 
         res.json({
@@ -329,8 +352,11 @@ app.get("/portfolio/value", async (req, res) => {
     }
 });
 
+
+// TRANSACTIONS
 app.get("/transactions", async (req, res) => {
     try {
+
         const result = await pool.query(
             `SELECT id, symbol, type, shares, price, total, created_at
             FROM transactions
@@ -339,6 +365,7 @@ app.get("/transactions", async (req, res) => {
         res.json(result.rows);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
@@ -347,7 +374,10 @@ app.get("/transactions", async (req, res) => {
     }
 });
 
+
+// Database connection test
 pool.query("SELECT NOW()", (error, result) => {
+
     if (error) {
         console.error("Database connection failed:", error);
     } else {
@@ -356,6 +386,7 @@ pool.query("SELECT NOW()", (error, result) => {
 });
 
 
+// Start server
 app.listen(PORT, () => {
-    console.log("Server Running on port: "+ PORT);
+    console.log("Server Running on port: " + PORT);
 });
