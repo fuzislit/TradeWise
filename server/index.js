@@ -9,19 +9,15 @@ function getStockPrice(symbol) {
 
         const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
 
-        const url =
-            `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
 
         https.get(url, (response) => {
-
             let data = "";
-
             response.on("data", (chunk) => {
                 data += chunk;
             });
 
             response.on("end", () => {
-
                 try {
                     const stockData = JSON.parse(data);
 
@@ -31,16 +27,13 @@ function getStockPrice(symbol) {
                         ));
                         return;
                     }
-
                     const price = stockData["Global Quote"]["05. price"];
 
                     if (!price) {
                         reject(new Error("Stock price not found"));
                         return;
                     }
-
                     resolve(Number(price));
-
                 } catch (error) {
                     reject(error);
                 }
@@ -50,6 +43,93 @@ function getStockPrice(symbol) {
             reject(error);
         });
     });
+}
+
+function calculateRealizedPnL(transactions) {
+
+    let realizedPnL = 0;
+    const holdings = {};
+
+    for (const transaction of transactions) {
+
+        const { symbol, type, shares, price } = transaction;
+
+        if (!holdings[symbol]) {
+            holdings[symbol] = {
+                shares: 0,
+                totalCost: 0
+            };
+        }
+
+        if (type === "BUY") {
+
+            holdings[symbol].shares += Number(shares);
+            holdings[symbol].totalCost += Number(shares) * Number(price);
+
+        } else if (type === "SELL") {
+
+            if (holdings[symbol].shares === 0) {
+                continue;
+            }
+
+            const averageCost =holdings[symbol].totalCost / holdings[symbol].shares;
+            const costOfSharesSold = averageCost * Number(shares);
+            const saleRevenue = Number(price) * Number(shares);
+
+            realizedPnL += saleRevenue - costOfSharesSold;
+            holdings[symbol].shares -= Number(shares);
+            holdings[symbol].totalCost -= costOfSharesSold;
+        }
+    }
+    return Number(realizedPnL.toFixed(2));
+}
+
+async function calculateUnrealizedPnL(transactions, holdings) {
+
+    let unrealizedPnL = 0;
+
+    for (const holding of holdings) {
+
+        const symbol = holding.symbol;
+        const shares = Number(holding.shares);
+
+        let totalCost = 0;
+        let totalShares = 0;
+
+        for (const transaction of transactions) {
+
+            if (transaction.symbol !== symbol) {
+                continue;
+            }
+
+            if (transaction.type === "BUY") {
+
+                totalCost +=
+                    Number(transaction.shares) *
+                    Number(transaction.price);
+
+                totalShares += Number(transaction.shares);
+
+            } else if (transaction.type === "SELL") {
+
+                if (totalShares === 0) {
+                    continue;
+                }
+
+                const averageCost = totalCost / totalShares;
+                totalCost -= averageCost * Number(transaction.shares);
+                totalShares -= Number(transaction.shares);
+            }
+        }
+
+        const averageCost = totalCost / totalShares;
+        const currentPrice = await getStockPrice(symbol);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // API REQUEST LIMIT
+
+        unrealizedPnL += (currentPrice - averageCost) * shares;
+    }
+
+    return Number(unrealizedPnL.toFixed(2));
 }
 
 const app = express();
@@ -374,6 +454,46 @@ app.get("/transactions", async (req, res) => {
     }
 });
 
+// PROFIT & LOSS
+app.get("/portfolio/pnl", async (req, res) => {
+    try {
+
+        const transactionsResult = await pool.query(
+            `SELECT *
+            FROM transactions
+            WHERE portfolio_id = $1
+            ORDER BY created_at ASC`,
+            [1]
+        );
+
+        const holdingsResult = await pool.query(
+            `SELECT *
+            FROM holdings
+            WHERE portfolio_id = $1`,
+            [1]
+        );
+
+        const realizedPnL = calculateRealizedPnL(transactionsResult.rows);
+
+
+        const unrealizedPnL = await calculateUnrealizedPnL(transactionsResult.rows,holdingsResult.rows);
+        const totalPnL = realizedPnL + unrealizedPnL;
+
+        res.json({
+            realizedPnL,
+            unrealizedPnL,
+            totalPnL
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            message: "Could not calculate profit and loss"
+        });
+    }
+});
 
 // Database connection test
 pool.query("SELECT NOW()", (error, result) => {
