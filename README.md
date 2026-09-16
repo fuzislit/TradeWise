@@ -22,3 +22,4 @@ The goal of TradeWise is to create a platform where users can manage a stock por
 - PostgreSQL
 - External Stock Market Data API
 - Git/GitHub
+- React.js
