@@ -1,14 +1,12 @@
 require("dotenv").config(); // configuration for the API key
-
+const cors = require("cors");
 const express = require("express");
 const pool = require("./db");
 const https = require("https");
 
 function getStockPrice(symbol) {
     return new Promise((resolve, reject) => {
-
         const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
-
         const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
 
         https.get(url, (response) => {
@@ -20,6 +18,7 @@ function getStockPrice(symbol) {
             response.on("end", () => {
                 try {
                     const stockData = JSON.parse(data);
+                    console.log("ALPHA VANTAGE RESPONSE:", stockData);
 
                     if (!stockData["Global Quote"]) {
                         reject(new Error(
@@ -51,7 +50,6 @@ function calculateRealizedPnL(transactions) {
     const holdings = {};
 
     for (const transaction of transactions) {
-
         const { symbol, type, shares, price } = transaction;
 
         if (!holdings[symbol]) {
@@ -62,7 +60,6 @@ function calculateRealizedPnL(transactions) {
         }
 
         if (type === "BUY") {
-
             holdings[symbol].shares += Number(shares);
             holdings[symbol].totalCost += Number(shares) * Number(price);
 
@@ -89,10 +86,8 @@ async function calculateUnrealizedPnL(transactions, holdings) {
     let unrealizedPnL = 0;
 
     for (const holding of holdings) {
-
         const symbol = holding.symbol;
         const shares = Number(holding.shares);
-
         let totalCost = 0;
         let totalShares = 0;
 
@@ -104,10 +99,7 @@ async function calculateUnrealizedPnL(transactions, holdings) {
 
             if (transaction.type === "BUY") {
 
-                totalCost +=
-                    Number(transaction.shares) *
-                    Number(transaction.price);
-
+                totalCost += Number(transaction.shares) * Number(transaction.price);
                 totalShares += Number(transaction.shares);
 
             } else if (transaction.type === "SELL") {
@@ -128,14 +120,13 @@ async function calculateUnrealizedPnL(transactions, holdings) {
 
         unrealizedPnL += (currentPrice - averageCost) * shares;
     }
-
     return Number(unrealizedPnL.toFixed(2));
 }
 
 const app = express();
 
+app.use(cors());
 app.use(express.json());
-
 const PORT = 3000;
 
 
@@ -197,7 +188,7 @@ app.post("/buy", async (req, res) => {
 
         const existingHolding = holdingResult.rows[0];
 
-        // Update holdings table
+        //Update holdings table
         if (existingHolding) {
             await pool.query(
                 "UPDATE holdings SET shares = shares + $1 WHERE id = $2",
@@ -210,7 +201,7 @@ app.post("/buy", async (req, res) => {
             );
         }
 
-        // Update transactions table
+        // Update transactions table 
         await pool.query(
             `INSERT INTO transactions
             (portfolio_id, symbol, type, shares, price, total)
@@ -424,8 +415,8 @@ app.get("/portfolio/value", async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
-
+        console.error("PORTFOLIO VALUE ERROR:", error);
+    
         res.status(500).json({
             message: "Could not calculate portfolio value"
         });
@@ -486,9 +477,8 @@ app.get("/portfolio/pnl", async (req, res) => {
         });
 
     } catch (error) {
-
-        console.error(error);
-
+        console.error("PNL ERROR:", error);
+    
         res.status(500).json({
             message: "Could not calculate profit and loss"
         });
