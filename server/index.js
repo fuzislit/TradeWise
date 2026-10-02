@@ -4,13 +4,30 @@ const express = require("express");
 const pool = require("./db");
 const https = require("https");
 
+const stockPriceCache = {};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const pendingRequests = {};
+
+
 function getStockPrice(symbol) {
-    return new Promise((resolve, reject) => {
+    const cached = stockPriceCache[symbol];
+
+    // Use the cached price if it is less than 5 minutes old
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        return Promise.resolve(cached.price);
+    }
+    // Reuse a request already in progress for this stock
+    if (pendingRequests[symbol]) {
+        return pendingRequests[symbol];
+    }
+
+    const request = new Promise((resolve, reject) => {
         const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
         const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
 
         https.get(url, (response) => {
             let data = "";
+
             response.on("data", (chunk) => {
                 data += chunk;
             });
@@ -18,30 +35,53 @@ function getStockPrice(symbol) {
             response.on("end", () => {
                 try {
                     const stockData = JSON.parse(data);
-                    console.log("ALPHA VANTAGE RESPONSE:", stockData);
 
                     if (!stockData["Global Quote"]) {
                         reject(new Error(
-                            stockData["Information"] || "Stock price unavailable"
+                            stockData["Information"] ||
+                            "Stock price unavailable"
                         ));
                         return;
                     }
-                    const price = stockData["Global Quote"]["05. price"];
 
-                    if (!price) {
+                    const price = Number(
+                        stockData["Global Quote"]["05. price"]
+                    );
+
+                    if (!Number.isFinite(price) || price <= 0) {
                         reject(new Error("Stock price not found"));
                         return;
                     }
-                    resolve(Number(price));
+
+                    // Save the successful price in the cache
+                    stockPriceCache[symbol] = {
+                        price: price,
+                        timestamp: Date.now()
+                    };
+
+                    resolve(price);
                 } catch (error) {
                     reject(error);
                 }
             });
 
-        }).on("error", (error) => {
-            reject(error);
-        });
+        }).on("error", reject);
     });
+
+    // Save the request so other endpoints can reuse it
+    pendingRequests[symbol] = request;
+
+    // Remove the request when it finishes, whether successful or not
+    request.then(
+        () => {
+            delete pendingRequests[symbol];
+        },
+        () => {
+            delete pendingRequests[symbol];
+        }
+    );
+
+    return request;
 }
 
 function calculateRealizedPnL(transactions) {
