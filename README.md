@@ -1,25 +1,26 @@
 # TradeWise
 
-TradeWise is a stock portfolio management application that simulates buying and tracking investments. The project was built to practice backend development, database design, API integration, and building a real-world application workflow.
+TradeWise is a personal learning project focused on building a stock paper-trading platform. I am developing this application to gain hands-on experience with full-stack software engineering, backend development, database design, API integration, and building practical application workflows.
 
 ## Purpose
 
-The goal of TradeWise is to create a platform where users can manage a stock portfolio, retrieve stock market data, track holdings, and maintain transaction history.
+The goal of TradeWise is to learn by building a real-world application that simulates stock trading. Through this project, I am developing my skills in React, Node.js, Express.js, and PostgreSQL while implementing features for managing a simulated portfolio, tracking stock prices, and recording transactions.
 
 ## Features
 
-- Retrieve stock market data through an external API
-- Buy stocks and update portfolio balances
-- Track owned stocks and shares
-- Store transaction history
-- Manage portfolio data using PostgreSQL
+* Retrieve stock prices using the Alpha Vantage API
+* Buy and sell stocks using a simulated portfolio
+* Update cash balances and stock holdings after trades
+* Track owned stocks, share quantities, and average cost
+* Store and retrieve transaction history
+* Calculate portfolio value and profit and loss (P/L)
+* Manage portfolio data using PostgreSQL
 
 ## Technologies Used
 
-- JavaScript
-- Node.js
-- Express.js
-- PostgreSQL
-- External Stock Market Data API
-- Git/GitHub
-- React.js
+* **Languages:** JavaScript
+* **Frontend:** React.js, Vite
+* **Backend:** Node.js, Express.js
+* **Database:** PostgreSQL
+* **External API:** Alpha Vantage
+* **Tools:** Git, GitHub, npm
